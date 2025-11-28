@@ -1,124 +1,115 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Inventario por Voz</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    select, button {
-      padding: 10px;
-      font-size: 16px;
-      margin: 10px 0;
-    }
-    #log {
-      margin-top: 20px;
-      padding: 10px;
-      background: #f0f0f0;
-      border-radius: 6px;
-      white-space: pre-wrap;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registro por Voz</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #btnHablar {
+            padding: 15px 25px;
+            font-size: 18px;
+            border-radius: 10px;
+            border: none;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        #btnHablar.escuchando {
+            background: red;
+        }
+
+        #textoSalida {
+            margin-top: 30px;
+            font-size: 22px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            min-height: 80px;
+            border: 2px solid #ddd;
+        }
+    </style>
 </head>
+
 <body>
-  <h2>Inventario por Voz</h2>
 
-  <label>Tienda:</label>
-  <select id="tienda">
-    <option value="quilmana">Quilmana</option>
-    <option value="imperial">Imperial</option>
-    <option value="nuevo_imperial">Nuevo Imperial</option>
-  </select>
+    <h2>🎤 Registro de Productos por Voz</h2>
 
-  <br />
+    <button id="btnHablar">🎙️ Hablar</button>
 
-  <button id="btnHablar">🎤 Hablar</button>
-  <button id="btnEnviar">Enviar a Excel</button>
+    <div id="textoSalida">Aquí aparecerá lo que dices…</div>
 
-  <div id="log"></div>
+    <script>
+        console.log("App iniciada correctamente.");
 
-<script>
-// -------------------------
-// CONFIG
-// -------------------------
-const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyi2eMjmhFxYZz54D__C6chvTiDaieSgZzL3Qw1o7KftOLKeFf10sMYEDDioYWbfbMY/exec";
-let textoReconocido = "";
+        const btn = document.getElementById("btnHablar");
+        const salida = document.getElementById("textoSalida");
 
-// -------------------------
-// RECONOCIMIENTO DE VOZ
-// -------------------------
-const btnHablar = document.getElementById("btnHablar");
-const log = document.getElementById("log");
+        let recognition;
+        let escuchando = false;
 
-btnHablar.onclick = () => {
-  const rec = new webkitSpeechRecognition();
-  rec.lang = "es-PE";
-  rec.continuous = false;
-  rec.interimResults = false;
+        // Compatibilidad
+        window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  rec.onresult = (event) => {
-    textoReconocido = event.results[0][0].transcript;
-    log.textContent = "Texto capturado: " + textoReconocido;
-  };
+        if (!window.SpeechRecognition) {
+            alert("Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.");
+        }
 
-  rec.onerror = (e) => log.textContent = "Error: " + e.error;
+        recognition = new SpeechRecognition();
+        recognition.lang = "es-ES";
+        recognition.interimResults = true;  // mostrar texto en vivo
+        recognition.continuous = true;      // no se corta si haces pausa
 
-  rec.start();
-};
+        // Para mostrar texto en vivo
+        recognition.onresult = (event) => {
+            let texto = "";
+            for (let i = 0; i < event.results.length; i++) {
+                texto += event.results[i][0].transcript;
+            }
+            salida.textContent = texto;
+            console.log("Reconociendo:", texto);
+        };
 
-// -------------------------
-// PARSEO (SEPARADOR: CORCHETE)
-// -------------------------
-function parsear(texto) {
-  const partes = texto.toLowerCase().split("corchete").map(p => p.trim());
-  if (partes.length < 4) return null;
+        recognition.onerror = (e) => {
+            console.warn("Error:", e.error);
+        };
 
-  return {
-    producto: partes[0] || "",
-    medida: partes[1] || "",
-    vencimiento: partes[2] || "",
-    cantidad: partes[3] || ""
-  };
-}
+        recognition.onend = () => {
+            if (escuchando) {
+                // Chrome a veces lo detiene solo si hay silencio, lo reiniciamos
+                recognition.start();
+                console.log("Reiniciado automáticamente…");
+            } else {
+                console.log("Fin del reconocimiento.");
+            }
+        };
 
-// -------------------------
-// ENVIAR A GOOGLE SHEETS
-// -------------------------
-const btnEnviar = document.getElementById("btnEnviar");
-btnEnviar.onclick = async () => {
-  if (!textoReconocido) {
-    log.textContent = "No hay texto capturado.";
-    return;
-  }
-
-  const data = parsear(textoReconocido);
-  if (!data) {
-    log.textContent = "Formato inválido. Usa: producto CORCHETE medida CORCHETE vence CORCHETE cantidad.";
-    return;
-  }
-
-  // Fecha de registro automática
-  data.fecha_registro = new Date().toISOString();
-  data.tienda = document.getElementById("tienda").value;
-
-  try {
-    const resp = await fetch(APP_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-
-    const txt = await resp.text();
-    log.textContent = "Respuesta: " + txt;
-
-  } catch (err) {
-    log.textContent = "Error al enviar: " + err;
-  }
-};
-</script>
+        // Botón ON/OFF
+        btn.onclick = () => {
+            if (!escuchando) {
+                recognition.start();
+                escuchando = true;
+                btn.textContent = "⛔ Detener";
+                btn.classList.add("escuchando");
+                salida.textContent = "Escuchando…";
+                console.log("🎤 Grabando…");
+            } else {
+                escuchando = false;
+                recognition.stop();
+                btn.textContent = "🎙️ Hablar";
+                btn.classList.remove("escuchando");
+                console.log("⛔ Deteniendo…");
+            }
+        };
+    </script>
 
 </body>
 </html>
