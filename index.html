@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventario por Voz</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    select, button {
+      padding: 10px;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    #log {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f0f0f0;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h2>Inventario por Voz</h2>
+
+  <label>Tienda:</label>
+  <select id="tienda">
+    <option value="quilmana">Quilmana</option>
+    <option value="imperial">Imperial</option>
+    <option value="nuevo_imperial">Nuevo Imperial</option>
+  </select>
+
+  <br />
+
+  <button id="btnHablar">🎤 Hablar</button>
+  <button id="btnEnviar">Enviar a Excel</button>
+
+  <div id="log"></div>
+
+<script>
+// -------------------------
+// CONFIG
+// -------------------------
+const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyi2eMjmhFxYZz54D__C6chvTiDaieSgZzL3Qw1o7KftOLKeFf10sMYEDDioYWbfbMY/exec";
+let textoReconocido = "";
+
+// -------------------------
+// RECONOCIMIENTO DE VOZ
+// -------------------------
+const btnHablar = document.getElementById("btnHablar");
+const log = document.getElementById("log");
+
+btnHablar.onclick = () => {
+  const rec = new webkitSpeechRecognition();
+  rec.lang = "es-PE";
+  rec.continuous = false;
+  rec.interimResults = false;
+
+  rec.onresult = (event) => {
+    textoReconocido = event.results[0][0].transcript;
+    log.textContent = "Texto capturado: " + textoReconocido;
+  };
+
+  rec.onerror = (e) => log.textContent = "Error: " + e.error;
+
+  rec.start();
+};
+
+// -------------------------
+// PARSEO (SEPARADOR: CORCHETE)
+// -------------------------
+function parsear(texto) {
+  const partes = texto.toLowerCase().split("corchete").map(p => p.trim());
+  if (partes.length < 4) return null;
+
+  return {
+    producto: partes[0] || "",
+    medida: partes[1] || "",
+    vencimiento: partes[2] || "",
+    cantidad: partes[3] || ""
+  };
+}
+
+// -------------------------
+// ENVIAR A GOOGLE SHEETS
+// -------------------------
+const btnEnviar = document.getElementById("btnEnviar");
+btnEnviar.onclick = async () => {
+  if (!textoReconocido) {
+    log.textContent = "No hay texto capturado.";
+    return;
+  }
+
+  const data = parsear(textoReconocido);
+  if (!data) {
+    log.textContent = "Formato inválido. Usa: producto CORCHETE medida CORCHETE vence CORCHETE cantidad.";
+    return;
+  }
+
+  // Fecha de registro automática
+  data.fecha_registro = new Date().toISOString();
+  data.tienda = document.getElementById("tienda").value;
+
+  try {
+    const resp = await fetch(APP_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+
+    const txt = await resp.text();
+    log.textContent = "Respuesta: " + txt;
+
+  } catch (err) {
+    log.textContent = "Error al enviar: " + err;
+  }
+};
+</script>
+
+</body>
+</html>
