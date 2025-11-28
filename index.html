@@ -6,109 +6,294 @@
     <title>Registro por Voz</title>
 
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 30px;
             text-align: center;
         }
 
-        #btnHablar {
-            padding: 15px 25px;
-            font-size: 18px;
+        .estado {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
             border-radius: 10px;
+            font-weight: bold;
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .estado.listo { background: #d4edda; color: #155724; }
+        .estado.escuchando { background: #fff3cd; color: #856404; }
+        .estado.procesando { background: #d1ecf1; color: #0c5460; }
+        .estado.error { background: #f8d7da; color: #721c24; }
+
+        #btnHablar {
+            display: block;
+            margin: 0 auto 30px;
+            padding: 20px 40px;
+            font-size: 20px;
+            border-radius: 50px;
             border: none;
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        #btnHablar:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
         }
 
         #btnHablar.escuchando {
-            background: red;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
         }
 
         #textoSalida {
-            margin-top: 30px;
-            font-size: 22px;
-            background: white;
-            padding: 20px;
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            min-height: 150px;
+            border: 2px solid #e0e0e0;
+            font-size: 18px;
+            line-height: 1.6;
+            color: #333;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        #textoSalida.vacio {
+            color: #999;
+            font-style: italic;
+        }
+
+        .instrucciones {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
             border-radius: 10px;
-            min-height: 80px;
-            border: 2px solid #ddd;
+            font-size: 14px;
+            color: #004085;
+        }
+
+        .instrucciones ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .instrucciones li {
+            margin: 5px 0;
         }
     </style>
 </head>
 
 <body>
 
-    <h2>🎤 Registro de Productos por Voz</h2>
+    <div class="container">
+        <h2>🎤 Registro de Productos por Voz</h2>
 
-    <button id="btnHablar">🎙️ Hablar</button>
+        <div id="estado" class="estado">Inicializando...</div>
 
-    <div id="textoSalida">Aquí aparecerá lo que dices…</div>
+        <button id="btnHablar">🎙️ Iniciar Grabación</button>
+
+        <div id="textoSalida" class="vacio">Presiona el botón y comienza a hablar...</div>
+
+        <div class="instrucciones">
+            <strong>📋 Instrucciones:</strong>
+            <ul>
+                <li>Acepta los permisos del micrófono cuando aparezca la ventana</li>
+                <li>Habla claro y cerca del micrófono</li>
+                <li>El texto aparecerá en tiempo real mientras hablas</li>
+                <li>Presiona "Detener" cuando termines</li>
+            </ul>
+        </div>
+    </div>
 
     <script>
-        console.log("App iniciada correctamente.");
+        console.log("🚀 App iniciada correctamente.");
 
         const btn = document.getElementById("btnHablar");
         const salida = document.getElementById("textoSalida");
+        const estadoDiv = document.getElementById("estado");
 
         let recognition;
         let escuchando = false;
+        let textoFinal = "";
 
-        // Compatibilidad
+        // Función para actualizar estado
+        function actualizarEstado(mensaje, clase) {
+            estadoDiv.textContent = mensaje;
+            estadoDiv.className = `estado ${clase}`;
+            console.log(`📊 ${mensaje}`);
+        }
+
+        // Verificar compatibilidad
         window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!window.SpeechRecognition) {
-            alert("Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.");
+            actualizarEstado("❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.", "error");
+            btn.disabled = true;
+            salida.textContent = "Por favor, abre esta página en Google Chrome o Microsoft Edge.";
+            salida.classList.remove("vacio");
+        } else {
+            // Configurar reconocimiento
+            recognition = new SpeechRecognition();
+            recognition.lang = "es-ES";
+            recognition.interimResults = true;  // Mostrar texto mientras hablas
+            recognition.continuous = true;      // Continuar escuchando
+            recognition.maxAlternatives = 1;
+
+            actualizarEstado("✅ Listo para grabar", "listo");
+
+            // Cuando recibe resultados
+            recognition.onresult = (event) => {
+                let textoTemporal = "";
+                
+                // Procesar todos los resultados
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        textoFinal += transcript + " ";
+                    } else {
+                        textoTemporal += transcript;
+                    }
+                }
+
+                // Mostrar texto combinado
+                const textoCompleto = textoFinal + textoTemporal;
+                if (textoCompleto.trim()) {
+                    salida.textContent = textoCompleto;
+                    salida.classList.remove("vacio");
+                }
+                
+                console.log("🎤 Reconociendo:", textoCompleto);
+            };
+
+            // Cuando inicia
+            recognition.onstart = () => {
+                actualizarEstado("🎤 Escuchando... Habla ahora", "escuchando");
+                console.log("🎤 Grabación iniciada");
+            };
+
+            // Cuando termina
+            recognition.onend = () => {
+                console.log("⏹️ Reconocimiento terminado");
+                
+                if (escuchando) {
+                    // Si debe seguir escuchando, reiniciar después de un pequeño delay
+                    setTimeout(() => {
+                        if (escuchando) {
+                            try {
+                                recognition.start();
+                                console.log("🔄 Reiniciando reconocimiento...");
+                            } catch (error) {
+                                console.error("Error al reiniciar:", error);
+                                escuchando = false;
+                                btn.textContent = "🎙️ Iniciar Grabación";
+                                btn.classList.remove("escuchando");
+                                actualizarEstado("✅ Grabación finalizada", "listo");
+                            }
+                        }
+                    }, 100);
+                } else {
+                    actualizarEstado("✅ Grabación finalizada", "listo");
+                }
+            };
+
+            // Manejo de errores
+            recognition.onerror = (event) => {
+                console.error("❌ Error:", event.error);
+                
+                let mensajeError = "";
+                
+                switch(event.error) {
+                    case 'no-speech':
+                        mensajeError = "⚠️ No se detectó voz. Intenta hablar más cerca del micrófono.";
+                        break;
+                    case 'audio-capture':
+                        mensajeError = "❌ No se puede acceder al micrófono. Verifica los permisos.";
+                        escuchando = false;
+                        btn.textContent = "🎙️ Iniciar Grabación";
+                        btn.classList.remove("escuchando");
+                        break;
+                    case 'not-allowed':
+                        mensajeError = "❌ Permiso denegado. Permite el acceso al micrófono en tu navegador.";
+                        escuchando = false;
+                        btn.textContent = "🎙️ Iniciar Grabación";
+                        btn.classList.remove("escuchando");
+                        break;
+                    case 'network':
+                        mensajeError = "❌ Error de red. Verifica tu conexión a internet.";
+                        break;
+                    default:
+                        mensajeError = `❌ Error: ${event.error}`;
+                }
+                
+                actualizarEstado(mensajeError, "error");
+            };
+
+            // Botón ON/OFF
+            btn.onclick = () => {
+                if (!escuchando) {
+                    // Iniciar grabación
+                    textoFinal = "";
+                    salida.textContent = "Escuchando...";
+                    salida.classList.add("vacio");
+                    
+                    try {
+                        recognition.start();
+                        escuchando = true;
+                        btn.textContent = "⏹️ Detener Grabación";
+                        btn.classList.add("escuchando");
+                        actualizarEstado("🎤 Escuchando... Habla ahora", "escuchando");
+                    } catch (error) {
+                        console.error("Error al iniciar:", error);
+                        actualizarEstado("❌ Error al iniciar. Intenta de nuevo.", "error");
+                    }
+                } else {
+                    // Detener grabación
+                    escuchando = false;
+                    recognition.stop();
+                    btn.textContent = "🎙️ Iniciar Grabación";
+                    btn.classList.remove("escuchando");
+                    actualizarEstado("⏹️ Procesando...", "procesando");
+                }
+            };
         }
-
-        recognition = new SpeechRecognition();
-        recognition.lang = "es-ES";
-        recognition.interimResults = true;  // mostrar texto en vivo
-        recognition.continuous = true;      // no se corta si haces pausa
-
-        // Para mostrar texto en vivo
-        recognition.onresult = (event) => {
-            let texto = "";
-            for (let i = 0; i < event.results.length; i++) {
-                texto += event.results[i][0].transcript;
-            }
-            salida.textContent = texto;
-            console.log("Reconociendo:", texto);
-        };
-
-        recognition.onerror = (e) => {
-            console.warn("Error:", e.error);
-        };
-
-        recognition.onend = () => {
-            if (escuchando) {
-                // Chrome a veces lo detiene solo si hay silencio, lo reiniciamos
-                recognition.start();
-                console.log("Reiniciado automáticamente…");
-            } else {
-                console.log("Fin del reconocimiento.");
-            }
-        };
-
-        // Botón ON/OFF
-        btn.onclick = () => {
-            if (!escuchando) {
-                recognition.start();
-                escuchando = true;
-                btn.textContent = "⛔ Detener";
-                btn.classList.add("escuchando");
-                salida.textContent = "Escuchando…";
-                console.log("🎤 Grabando…");
-            } else {
-                escuchando = false;
-                recognition.stop();
-                btn.textContent = "🎙️ Hablar";
-                btn.classList.remove("escuchando");
-                console.log("⛔ Deteniendo…");
-            }
-        };
     </script>
 
 </body>
